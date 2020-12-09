@@ -1,50 +1,59 @@
-{-# LANGUAGE TypeApplications, RecordWildCards #-}
+{-# LANGUAGE TypeApplications, RecordWildCards, BangPatterns, OverloadedStrings #-}
 module Main where
 
-import Text.ParserCombinators.ReadP
 import Debug.Trace
 
-import Data.Set (Set)
-import qualified Data.Set as Set
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as Set
 
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as Map
+
+import Text.Parsec hiding (getInput)
+import Text.Parsec.ByteString.Lazy
+import Text.Parsec.Char
 
 import Data.Array
-import Data.Maybe
-import Data.Tuple
+import Data.Tuple (swap)
+
+import Data.Char (digitToInt)
+import Data.List (foldl')
 
 getInput :: FilePath -> IO Program
-getInput fp = do str <- readFile fp
-                 let instrs = map (read @Instruction) $ lines str
-                 return $ listArray (0, length instrs - 1) instrs
+getInput fp = do result <- parseFromFile program fp
+                 case result of
+                     Left err -> print err >> error "parse error!"
+                     Right r -> return r
 
 data Instruction = NOP Int
                  | ACC Int
                  | JMP Int
   deriving (Show)
 
-parseInstruction :: ReadP Instruction
-parseInstruction = do code <- parseCode
-                      skipSpaces
-                      val <- parseInstrInt
-                      return (code val)
-   where parseCode :: ReadP (Int -> Instruction)
-         parseCode = choice [ fromString "nop" NOP
-                            , fromString "acc" ACC
-                            , fromString "jmp" JMP ]
+
+program :: Parser Program
+program = do instrs <- instruction `sepBy1` (char '\n')
+             return $ listArray (0, length instrs - 1) instrs
+
+instruction :: Parser Instruction
+instruction = do code <- parseCode
+                 space
+                 val <- signed decimal
+                 return (code val)
+   where parseCode :: Parser (Int -> Instruction)
+         parseCode = fromString "nop" NOP <|>
+                     fromString "acc" ACC <|>
+                     fromString "jmp" JMP
          fromString :: String -> (Int -> Instruction)
-                     -> ReadP (Int -> Instruction)
+                     -> Parser (Int -> Instruction)
          fromString str ins = string str >> pure ins
-         parseInstrInt :: ReadP Int
-         parseInstrInt = optional (char '+') >> readS_to_P (reads @Int)
+         signed :: Parser Int -> Parser Int
+         signed p = (negate <$> (char '-' >> p)) <|> (char '+' >> p)
+         decimal :: Parser Int
+         decimal = foldl (\x d -> 10* x + (digitToInt d)) 0 <$> many1 digit
 
 
-instance Read Instruction where
-  readsPrec _ = readP_to_S parseInstruction
-
-data VirtualMachine = VM { accumulator :: Int
-                         , instr :: Int }
+data VirtualMachine = VM { accumulator :: Int, instr :: Int }
 
 initialVMState :: VirtualMachine
 initialVMState = VM {accumulator = 0, instr = 0}
@@ -58,7 +67,7 @@ type Program = Array Int Instruction
 
 runProgram :: Program -> Int
 runProgram progArr = run initialVMState Set.empty
-    where run :: VirtualMachine -> Set Int -> Int
+    where run :: VirtualMachine -> IntSet -> Int
           run vm@(VM {..}) visited =
               if instr `Set.member` visited
               || let (l,h) = bounds progArr in instr < l && instr >= h
@@ -70,7 +79,7 @@ runProgram progArr = run initialVMState Set.empty
 
 runProgramMaybe :: Program -> VirtualMachine -> Maybe Int
 runProgramMaybe progArr ivm = run ivm Set.empty
-    where run :: VirtualMachine -> Set Int -> Maybe Int
+    where run :: VirtualMachine -> IntSet -> Maybe Int
           run vm@(VM {..}) visited =
               if instr `Set.member` visited
               then Nothing
@@ -83,7 +92,7 @@ runProgramMaybe progArr ivm = run ivm Set.empty
 
 runAndFix :: Program -> Maybe Int
 runAndFix progArr = run initialVMState Set.empty
-    where run :: VirtualMachine -> Set Int -> Maybe Int
+    where run :: VirtualMachine -> IntSet -> Maybe Int
           run vm@(VM {..}) visited =
               if instr `Set.member` visited
               then Nothing
@@ -104,9 +113,9 @@ runAndFix progArr = run initialVMState Set.empty
                                           Just acc -> Just acc
                                           Nothing -> continue
 
-reachable :: Program -> Set Int
+reachable :: Program -> IntSet
 reachable progArr = run initialVMState Set.empty
-    where run :: VirtualMachine -> Set Int -> Set Int
+    where run :: VirtualMachine -> IntSet -> IntSet
           run vm@(VM {..}) visited =
               if instr `Set.member` visited then visited
               else let curI = progArr ! instr
@@ -114,18 +123,18 @@ reachable progArr = run initialVMState Set.empty
                        visited' = instr `Set.insert` visited
                    in run vm' visited'
 
-ppSet :: Show a => Set a -> String
+ppSet :: IntSet -> String
 ppSet set = "{" ++ (reverse r2) ++ "}"
   where ('[':r) = show $ Set.elems set
         (']':r2) = reverse r
 
 
 data PreComputed =
-     PC { n' :: Map Int Int
-        , a' :: Map Int Int
-        , j  :: Map Int Int
-        , j'  :: Map Int Int
-        , r  :: Set Int }
+     PC { n' :: IntMap Int
+        , a' :: IntMap Int
+        , j  :: IntMap Int
+        , j' :: IntMap Int
+        , r  :: IntSet }
   deriving (Show)
 
 modifyArr :: Ix i => Array i e -> i -> (e -> e) -> Array i e
