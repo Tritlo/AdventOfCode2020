@@ -40,8 +40,6 @@ solution2 looking_for (a:b:res) = solution2' looking_for (a+b) (Seq.fromList [a,
               then solution2' looking_for (cur_sum - c) cs inc
               else solution2' looking_for (cur_sum + i) (els :|> i) is
 
---solution2 looking_for -> [Int]
-
 main :: IO ()
 main = do testInput <- getInput "testInput"
           input <- getInput "input"
