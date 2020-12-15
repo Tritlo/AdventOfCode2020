@@ -14,16 +14,26 @@ data Nav = N Float
          | F Float
  deriving (Show)
 
-isDir :: Nav -> Bool
-isDir (N _) = True
-isDir (S _) = True
-isDir (E _) = True
-isDir (W _) = True
-isDir _ = False
 
-isF :: Nav -> Bool
-isF (F _) = True
-isF _ = False
+
+data Change = Dir (Complex Float)
+            | Rot (Complex Float)
+            | Move (Complex Float)
+
+ deriving (Show)
+
+degToRot :: Int -> Float
+degToRot d = fromIntegral (d `div` 90)*pi/2
+
+navToChange :: Nav -> Change
+navToChange (N m) = Dir  $ 0 :+ m
+navToChange (S m) = Dir  $ 0 :+ (-m)
+navToChange (E m) = Dir  $ m :+ 0
+navToChange (W m) = Dir  $ (-m) :+ 0
+navToChange (L d) = Rot  $ mkPolar 1.0 (degToRot d)
+navToChange (R d) = Rot  $ mkPolar 1.0 (-(degToRot d))
+navToChange (F m) = Move $ mkPolar m 0
+
 
 
 instance Read Nav where
@@ -51,8 +61,13 @@ solution navs = round $ abs (dx + ix) + abs (dy + iy)
   where (dirs, instr) = (filter isDir navs, filter (not . isDir) navs)
         (dx :+ dy) = sum $ map dirToComplex dirs
         (ix :+ iy) = instrsToComplex 0 (0 :+ 0) instr
-        degToRot :: Int -> Float
-        degToRot d = fromIntegral (d `div` 90)*pi/2
+
+        isDir :: Nav -> Bool
+        isDir (N _) = True
+        isDir (S _) = True
+        isDir (E _) = True
+        isDir (W _) = True
+        isDir _ = False
 
         instrsToComplex :: Float -> Complex Float -> [Nav] -> Complex Float
         instrsToComplex _ curLoc [] = curLoc
@@ -67,28 +82,12 @@ solution navs = round $ abs (dx + ix) + abs (dy + iy)
 
 solution2 :: [Nav] -> Int
 solution2 navs = round $ abs ix + abs iy
-  where (ix :+ iy) = run 0 (10 :+ 1) navs
-        degToRot :: Int -> Float
-        degToRot d = fromIntegral (d `div` 90)*pi/2
-
-        dirToMove :: Nav -> Complex Float
-        dirToMove (N m) = 0 :+ m
-        dirToMove (S m) = 0 :+ (-m)
-        dirToMove (E m) = m :+ 0
-        dirToMove (W m) = (-m) :+ 0
-
-        rotToChange :: Nav -> Complex Float
-        rotToChange (L d) = mkPolar 1.0 (degToRot d)
-        rotToChange (R d) = mkPolar 1.0 (-(degToRot d))
-
-        fToMove :: Nav -> Complex Float
-        fToMove (F m) = mkPolar m 0
-
-        run :: Complex Float -> Complex Float -> [Nav] -> Complex Float
+  where (ix :+ iy) = run 0 (10 :+ 1) $ map navToChange navs
+        run :: Complex Float -> Complex Float -> [Change] -> Complex Float
         run ship _ [] = ship
-        run ship wp (ins:rest) | isDir ins = run ship (wp + dirToMove ins) rest
-        run ship wp (ins:rest) | isF ins = run (ship + fToMove ins*wp) wp rest
-        run ship wp (ins:rest) = run ship (wp*rotToChange ins) rest
+        run ship wp (Dir d:rest) = run ship (wp + d) rest
+        run ship wp (Rot r:rest) = run ship (wp*r) rest
+        run ship wp (Move m:rest)= run (ship + m*wp) wp rest
 
 
 main :: IO ()
