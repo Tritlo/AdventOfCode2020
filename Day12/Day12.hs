@@ -1,7 +1,9 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Main where
 
 import Data.Complex
 
+import Debug.Trace
 
 data Nav = N Float
          | S Float
@@ -18,6 +20,10 @@ isDir (S _) = True
 isDir (E _) = True
 isDir (W _) = True
 isDir _ = False
+
+isF :: Nav -> Bool
+isF (F _) = True
+isF _ = False
 
 
 instance Read Nav where
@@ -43,14 +49,10 @@ dirToComplex _ = undefined
 solution :: [Nav] -> Int
 solution navs = round $ abs (dx + ix) + abs (dy + iy)
   where (dirs, instr) = (filter isDir navs, filter (not . isDir) navs)
-        (dx :+ dy) = foldl1 (\(a :+ b) (x :+ y) -> (a+x) :+ (b+y)) $
-                      map dirToComplex dirs
+        (dx :+ dy) = sum $ map dirToComplex dirs
         (ix :+ iy) = instrsToComplex 0 (0 :+ 0) instr
         degToRot :: Int -> Float
-        degToRot 0 = 0
-        degToRot 90 = pi/2
-        degToRot 180 = pi
-        degToRot 270 = 3*pi/2
+        degToRot d = fromIntegral (d `div` 90)*pi/2
 
         instrsToComplex :: Float -> Complex Float -> [Nav] -> Complex Float
         instrsToComplex _ curLoc [] = curLoc
@@ -58,13 +60,39 @@ solution navs = round $ abs (dx + ix) + abs (dy + iy)
             = instrsToComplex (curPhase + degToRot d) curLoc rest
         instrsToComplex curPhase curLoc ((R d):rest)
             = instrsToComplex (curPhase - degToRot d) curLoc rest
-        instrsToComplex curPhase (cx :+ cy) ((F m):rest)
-            = instrsToComplex curPhase ((cx+x) :+ (cy +y)) rest
-            where (x :+ y) = mkPolar m curPhase
+        instrsToComplex curPhase ship ((F m):rest)
+            = instrsToComplex curPhase (ship+rot) rest
+            where rot = mkPolar m curPhase
 
+
+solution2 :: [Nav] -> Int
+solution2 navs = round $ abs ix + abs iy
+  where (ix :+ iy) = run 0 (10 :+ 1) navs
+        degToRot :: Int -> Float
+        degToRot d = fromIntegral (d `div` 90)*pi/2
+
+        dirToMove :: Nav -> Complex Float
+        dirToMove (N m) = 0 :+ m
+        dirToMove (S m) = 0 :+ (-m)
+        dirToMove (E m) = m :+ 0
+        dirToMove (W m) = (-m) :+ 0
+
+        rotToChange :: Nav -> Complex Float
+        rotToChange (L d) = mkPolar 1.0 (degToRot d)
+        rotToChange (R d) = mkPolar 1.0 (-(degToRot d))
+
+        fToMove :: Nav -> Complex Float
+        fToMove (F m) = mkPolar m 0
+
+        run :: Complex Float -> Complex Float -> [Nav] -> Complex Float
+        run ship _ [] = ship
+        run ship wp (ins:rest) | isDir ins = run ship (wp + dirToMove ins) rest
+        run ship wp (ins:rest) | isF ins = run (ship + fToMove ins*wp) wp rest
+        run ship wp (ins:rest) = run ship (wp*rotToChange ins) rest
 
 
 main :: IO ()
-main = do getInput "test-input" >>= print
-          getInput "test-input" >>= print . solution
+main = do getInput "test-input" >>= print . solution
+          getInput "test-input" >>= print . solution2
           getInput "input" >>= print . solution
+          getInput "input" >>= print . solution2
