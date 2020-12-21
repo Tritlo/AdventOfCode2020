@@ -98,7 +98,8 @@ solution2 Input{..} = solve couldBe Map.empty
                     min_gt_fb = Set.lookupMin gt_fb
           couldBe :: [(Int, Set String)]
           couldBe = zipWith (\i f -> (i,
-             Set.fromList $ map key $ filter (could_be_field f) fields)) [1..] t_fields
+             Set.fromList $ map key $
+              filter (could_be_field f) fields)) [1..] t_fields
 
 
 contains :: Range -> Int -> Bool
