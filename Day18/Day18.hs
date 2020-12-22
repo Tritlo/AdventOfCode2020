@@ -48,7 +48,6 @@ transPrec :: Expr -> Expr
 transPrec (Par e) = Par $ transPrec e
 transPrec (Digit i) = Digit i
 transPrec (Add a (Mul b c)) = Mul (Add (transPrec a) (transPrec b)) (transPrec c)
--- 1*2 + 3
 transPrec (Add (Mul a b) c) = Mul (Add (transPrec a) (transPrec b)) (transPrec c)
 transPrec (Add a b) = if isMul a' || isMul b'
                       then transPrec $ Add a' b'
